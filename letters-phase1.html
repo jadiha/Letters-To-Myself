@@ -738,7 +738,7 @@
 
     const { error } = await db.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: window.location.origin }
+      options: { emailRedirectTo: 'https://letters-to-myself.vercel.app' }
     })
 
     authSubmit.disabled = false
