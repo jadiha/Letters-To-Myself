@@ -29,6 +29,8 @@ Note: magic link sign-in redirects to the live Vercel URL, so auth won't complet
 
 ## Database setup
 
+> Only needed if you're forking this and setting up your own Supabase project. The live site at [letters-to-myself.vercel.app](https://letters-to-myself.vercel.app) is already configured.
+
 Run this in the Supabase SQL editor:
 
 ```sql
