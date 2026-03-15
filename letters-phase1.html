@@ -483,11 +483,108 @@
       letter-spacing: 0.22em; color: var(--ink-light);
     }
     .page-footer p { margin-top: 10px; font-style: italic; font-weight: 300; }
+
+    /* =========================================================
+       SIGN-OUT BUTTON
+    ========================================================= */
+    .btn-signout {
+      position: fixed; top: 18px; right: 22px;
+      background: transparent; border: 1px solid var(--border);
+      color: var(--ink-light); font-family: var(--f-title); font-size: 0.72rem;
+      letter-spacing: 0.16em; text-transform: lowercase;
+      padding: 6px 16px; cursor: pointer; z-index: 10;
+      transition: border-color 0.2s, color 0.2s;
+    }
+    .btn-signout:hover { border-color: var(--border-mid); color: var(--ink-mid); }
+
+    /* =========================================================
+       AUTH SCREEN
+    ========================================================= */
+    .auth-screen {
+      display: none;
+      position: fixed; inset: 0; z-index: 500;
+      background-color: var(--cream);
+      background-image: radial-gradient(circle, rgba(232,144,176,0.13) 1px, transparent 1px);
+      background-size: 22px 22px;
+      align-items: center; justify-content: center;
+      padding: 24px;
+    }
+    .auth-screen.visible { display: flex; }
+
+    .auth-card {
+      position: relative;
+      background: var(--paper);
+      width: 100%; max-width: 420px;
+      border: 1px solid var(--border);
+      box-shadow: 0 12px 48px rgba(74,32,53,0.12), 0 3px 14px rgba(74,32,53,0.07);
+      padding: 44px 48px 40px;
+      text-align: center;
+      background-image: repeating-linear-gradient(
+        transparent, transparent 27px,
+        rgba(220,148,168,0.10) 27px, rgba(220,148,168,0.10) 28px
+      );
+    }
+    .auth-card::before {
+      content: ''; position: absolute; inset: 14px;
+      border: 1px dashed rgba(215,148,170,0.20);
+      pointer-events: none;
+    }
+
+    .auth-prompt {
+      font-family: var(--f-title); font-size: 0.8rem; font-weight: 400;
+      font-style: italic; letter-spacing: 0.08em;
+      color: var(--ink-light); margin-bottom: 18px;
+    }
+
+    .auth-email {
+      display: block; width: 100%;
+      background: transparent; border: none;
+      border-bottom: 1px solid var(--border-mid);
+      outline: none;
+      font-family: var(--f-hand); font-size: 1.05rem; color: var(--ink);
+      text-align: center; padding: 8px 4px;
+      transition: border-color 0.2s;
+    }
+    .auth-email::placeholder { color: rgba(168,136,152,0.45); font-style: italic; }
+    .auth-email:focus { border-bottom-color: var(--pink-accent); }
+
+    .auth-msg {
+      margin-top: 18px; min-height: 22px;
+      font-family: var(--f-title); font-size: 0.8rem;
+      font-style: italic; letter-spacing: 0.06em;
+      color: var(--ink-mid);
+    }
+    .auth-msg.error { color: #b05070; }
   </style>
 </head>
 
 <body>
-<main class="page">
+
+<!-- ══ AUTH SCREEN ══════════════════════════════════════════════ -->
+<div id="authScreen" class="auth-screen">
+  <div class="auth-card">
+    <div class="paper-bow-wrap">
+      <div class="paper-bow">
+        <div class="paper-bow-loop"></div>
+        <div class="paper-bow-knot"></div>
+        <div class="paper-bow-loop"></div>
+      </div>
+    </div>
+    <div class="rule">✦</div>
+    <h1 class="page-title">Letters to Myself</h1>
+    <p class="page-subtitle">a daily note of gratitude</p>
+    <div class="rule" style="margin: 20px 0;">❧</div>
+    <p class="auth-prompt">enter your email to receive a sign-in link</p>
+    <input type="email" id="authEmail" class="auth-email" placeholder="your@email.com" autocomplete="email" />
+    <button id="authSubmit" class="btn-write" style="margin-top: 20px; width: 100%;">✉ &nbsp;send me a link</button>
+    <div id="authMsg" class="auth-msg"></div>
+  </div>
+</div>
+
+<!-- ══ SIGN-OUT ══════════════════════════════════════════════════ -->
+<button id="btnSignOut" class="btn-signout" style="display:none;">sign out</button>
+
+<main class="page" id="mainApp" style="display:none;">
 
   <!-- ══ HEADER ══════════════════════════════════════════════ -->
   <header class="page-header">
@@ -579,124 +676,125 @@
 <!-- ══ JAVASCRIPT ══════════════════════════════════════════════ -->
 <script>
 
-  /* ═══════════════════════════════════════════════════════════
-     SUPABASE CONFIG
-     1. Go to https://supabase.com → New project
-     2. Settings → API → copy "Project URL" and "anon public" key
-     3. Paste them below
-     Run this SQL in the Supabase SQL editor to create the table:
-
-       create table letters (
-         id         uuid    default gen_random_uuid() primary key,
-         device_id  text    not null,
-         date       text    not null,
-         text       text    not null,
-         created_at timestamptz default now(),
-         unique(device_id, date)
-       );
-       alter table letters enable row level security;
-       create policy "device owns their letters"
-         on letters for all
-         using  (device_id = current_setting('request.headers')::json->>'x-device-id')
-         with check (device_id = current_setting('request.headers')::json->>'x-device-id');
-
-  ═══════════════════════════════════════════════════════════ */
-  const SUPABASE_URL = 'YOUR_SUPABASE_URL'   // ← replace
-  const SUPABASE_KEY = 'YOUR_SUPABASE_ANON_KEY' // ← replace
-
-  // Supabase is ready if the CDN loaded and the user has filled in real values
-  const supabaseReady = (
-    typeof supabase !== 'undefined' &&
-    !SUPABASE_URL.startsWith('YOUR_') &&
-    !SUPABASE_KEY.startsWith('YOUR_')
-  )
-
-  let db = null
-  if (supabaseReady) {
-    db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY)
-  }
-
-  /* ── Device ID (anonymous user identifier) ─────────────────── */
-  function getDeviceId() {
-    let id = localStorage.getItem('ltm_device_id')
-    if (!id) {
-      id = crypto.randomUUID()
-      localStorage.setItem('ltm_device_id', id)
-    }
-    return id
-  }
-  const DEVICE_ID = getDeviceId()
+  /* ── Supabase client ───────────────────────────────────────── */
+  const SUPABASE_URL = 'https://bzlohfyzofpiylpbbwco.supabase.co'
+  const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ6bG9oZnl6b2ZwaXlscGJid2NvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM1Mjc1NzYsImV4cCI6MjA4OTEwMzU3Nn0.7p3lHJOUgMB0buamcXTkn6ZoJgy0WSgdO2dl-aHDliw'
+  const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY)
 
   /* ── State ─────────────────────────────────────────────────── */
-  const letters = [];   // starts empty; grows as user writes
-  const cardMap = {};   // date string → card DOM element
-  let currentEditCard = null;  // set when editing an existing letter
+  let letters        = []
+  const cardMap      = {}
+  let currentEditCard = null
 
   /* ── DOM refs ──────────────────────────────────────────────── */
-  const grid          = document.getElementById('lettersGrid');
-  const emptyState    = document.getElementById('emptyState');
-  const writeOverlay  = document.getElementById('writeOverlay');
-  const paperDate     = document.getElementById('paperDate');
-  const paperTextarea = document.getElementById('paperTextarea');
-  const btnOpenWrite  = document.getElementById('btnOpenWrite');
-  const btnSaveWrite  = document.getElementById('btnSaveWrite');
-  const btnCancelWrite= document.getElementById('btnCancelWrite');
+  const authScreen    = document.getElementById('authScreen')
+  const authEmail     = document.getElementById('authEmail')
+  const authSubmit    = document.getElementById('authSubmit')
+  const authMsg       = document.getElementById('authMsg')
+  const mainApp       = document.getElementById('mainApp')
+  const btnSignOut    = document.getElementById('btnSignOut')
+  const grid          = document.getElementById('lettersGrid')
+  const emptyState    = document.getElementById('emptyState')
+  const writeOverlay  = document.getElementById('writeOverlay')
+  const paperDate     = document.getElementById('paperDate')
+  const paperTextarea = document.getElementById('paperTextarea')
+  const btnOpenWrite  = document.getElementById('btnOpenWrite')
+  const btnSaveWrite  = document.getElementById('btnSaveWrite')
+  const btnCancelWrite= document.getElementById('btnCancelWrite')
 
   /* ── Helpers ───────────────────────────────────────────────── */
   function todayFormatted() {
     return new Date().toLocaleDateString('en-US', {
       month: 'long', day: 'numeric', year: 'numeric'
-    });
+    })
   }
 
-  /* ── Persistence: save ─────────────────────────────────────── */
-  async function persistLetter(letter) {
-    // Always write to localStorage as the fast local cache
-    const cached = JSON.parse(localStorage.getItem('ltm_letters') || '[]')
-    const idx = cached.findIndex(l => l.date === letter.date)
-    if (idx !== -1) cached[idx] = letter
-    else cached.unshift(letter)
-    localStorage.setItem('ltm_letters', JSON.stringify(cached))
+  /* ── Auth: show / hide screens ─────────────────────────────── */
+  function showApp() {
+    authScreen.classList.remove('visible')
+    mainApp.style.display = ''
+    btnSignOut.style.display = ''
+  }
 
-    // Write to Supabase if configured
-    if (db) {
-      await db.from('letters').upsert(
-        { device_id: DEVICE_ID, date: letter.date, text: letter.text },
-        { onConflict: 'device_id,date' }
-      )
+  function showAuth() {
+    authScreen.classList.add('visible')
+    mainApp.style.display = 'none'
+    btnSignOut.style.display = 'none'
+    // Clear letters when switching accounts
+    letters = []
+    grid.innerHTML = ''
+    updateView()
+    updateWriteButton()
+  }
+
+  /* ── Auth: send magic link ─────────────────────────────────── */
+  authSubmit.addEventListener('click', async () => {
+    const email = authEmail.value.trim()
+    if (!email) { setAuthMsg('please enter your email ✿', false); return }
+
+    authSubmit.disabled = true
+    authSubmit.textContent = 'sending…'
+    setAuthMsg('', false)
+
+    const { error } = await db.auth.signInWithOtp({
+      email,
+      options: { emailRedirectTo: window.location.origin }
+    })
+
+    authSubmit.disabled = false
+    authSubmit.innerHTML = '✉ &nbsp;send me a link'
+
+    if (error) {
+      setAuthMsg(error.message, true)
+    } else {
+      setAuthMsg('check your inbox — a link is on its way ✿', false)
+      authEmail.value = ''
     }
+  })
+
+  authEmail.addEventListener('keydown', e => {
+    if (e.key === 'Enter') authSubmit.click()
+  })
+
+  function setAuthMsg(text, isError) {
+    authMsg.textContent = text
+    authMsg.className = 'auth-msg' + (isError ? ' error' : '')
+  }
+
+  /* ── Auth: sign out ────────────────────────────────────────── */
+  btnSignOut.addEventListener('click', async () => {
+    await db.auth.signOut()
+  })
+
+  /* ── Auth: state changes ───────────────────────────────────── */
+  db.auth.onAuthStateChange(async (event, session) => {
+    if (session?.user) {
+      showApp()
+      await loadLetters(session.user.id)
+    } else {
+      showAuth()
+    }
+  })
+
+  /* ── Persistence: save ─────────────────────────────────────── */
+  async function persistLetter(letter, userId) {
+    await db.from('letters').upsert(
+      { user_id: userId, date: letter.date, text: letter.text },
+      { onConflict: 'user_id,date' }
+    )
   }
 
   /* ── Persistence: load ─────────────────────────────────────── */
-  async function loadLetters() {
-    if (db) {
-      const { data, error } = await db
-        .from('letters')
-        .select('date, text')
-        .eq('device_id', DEVICE_ID)
-        .order('created_at', { ascending: false })
+  async function loadLetters(userId) {
+    const { data, error } = await db
+      .from('letters')
+      .select('date, text')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
 
-      if (!error && data && data.length > 0) {
-        // Hydrate from Supabase — also refresh local cache
-        localStorage.setItem('ltm_letters', JSON.stringify(data))
-        data.forEach(l => {
-          letters.push(l)
-          addCard(l)
-        })
-        updateView()
-        updateWriteButton()
-        return
-      }
+    if (!error && data) {
+      data.forEach(l => { letters.push(l); addCard(l) })
     }
-
-    // Fallback: local cache
-    try {
-      const cached = JSON.parse(localStorage.getItem('ltm_letters') || '[]')
-      cached.forEach(l => {
-        letters.push(l)
-        addCard(l)
-      })
-    } catch (_) {}
     updateView()
     updateWriteButton()
   }
@@ -704,24 +802,24 @@
   /* ── View update ───────────────────────────────────────────── */
   function updateView() {
     if (letters.length === 0) {
-      emptyState.classList.remove('hidden');
-      grid.style.display = 'none';
+      emptyState.classList.remove('hidden')
+      grid.style.display = 'none'
     } else {
-      emptyState.classList.add('hidden');
-      grid.style.display = '';
+      emptyState.classList.add('hidden')
+      grid.style.display = ''
     }
   }
 
-  /* ── Render a single card and prepend to grid ──────────────── */
+  /* ── Render a single card ──────────────────────────────────── */
   function addCard(letter) {
-    const wrapper = document.createElement('div');
-    wrapper.className = 'card-wrapper';
+    const wrapper = document.createElement('div')
+    wrapper.className = 'card-wrapper'
 
-    const card = document.createElement('div');
-    card.className = 'letter-card';
-    card.setAttribute('role', 'button');
-    card.setAttribute('tabindex', '0');
-    card.setAttribute('aria-label', `Letter from ${letter.date}. Click to open.`);
+    const card = document.createElement('div')
+    card.className = 'letter-card'
+    card.setAttribute('role', 'button')
+    card.setAttribute('tabindex', '0')
+    card.setAttribute('aria-label', `Letter from ${letter.date}. Click to open.`)
 
     card.innerHTML = `
       <div class="card-inner">
@@ -743,134 +841,120 @@
           </div>
         </div>
       </div>
-    `;
+    `
 
-    const hint = document.createElement('p');
-    hint.className = 'close-hint';
-    hint.textContent = '✦  click to seal  ✦';
+    const hint = document.createElement('p')
+    hint.className = 'close-hint'
+    hint.textContent = '✦  click to seal  ✦'
 
-    wrapper.appendChild(card);
-    wrapper.appendChild(hint);
+    wrapper.appendChild(card)
+    wrapper.appendChild(hint)
+    grid.prepend(wrapper)
+    cardMap[letter.date] = card
 
-    // Prepend so newest letter appears first
-    grid.prepend(wrapper);
-
-    // Store reference so we can flip it open programmatically
-    cardMap[letter.date] = card;
-
-    // Toggle flip
     function toggle() {
-      if (writeOverlay.classList.contains('open')) return;
-      const isOpen = card.classList.toggle('open');
+      if (writeOverlay.classList.contains('open')) return
+      const isOpen = card.classList.toggle('open')
       card.setAttribute('aria-label',
-        isOpen
-          ? `Letter from ${letter.date}. Click to close.`
-          : `Letter from ${letter.date}. Click to open.`
-      );
+        isOpen ? `Letter from ${letter.date}. Click to close.`
+               : `Letter from ${letter.date}. Click to open.`)
     }
-    card.addEventListener('click', toggle);
+    card.addEventListener('click', toggle)
     card.addEventListener('keydown', e => {
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
-    });
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle() }
+    })
   }
 
-  /* ── Open writing overlay ──────────────────────────────────── */
+  /* ── Writing overlay ───────────────────────────────────────── */
   function openOverlay() {
-    paperDate.textContent = todayFormatted();
-    paperTextarea.value = '';
-    paperTextarea.style.height = 'auto';
-    writeOverlay.classList.add('open');
-    setTimeout(() => paperTextarea.focus(), 100);
+    paperDate.textContent = todayFormatted()
+    paperTextarea.value = ''
+    paperTextarea.style.height = 'auto'
+    writeOverlay.classList.add('open')
+    setTimeout(() => paperTextarea.focus(), 100)
   }
 
-  /* ── Close writing overlay ─────────────────────────────────── */
   function closeOverlay() {
-    writeOverlay.classList.remove('open');
-    currentEditCard = null;
+    writeOverlay.classList.remove('open')
+    currentEditCard = null
   }
 
-  /* ── Save letter ───────────────────────────────────────────── */
   async function saveLetter() {
-    const text = paperTextarea.value.trim();
-
+    const text = paperTextarea.value.trim()
     if (!text) {
-      paperTextarea.classList.remove('shake');
-      void paperTextarea.offsetWidth;
-      paperTextarea.classList.add('shake');
+      paperTextarea.classList.remove('shake')
+      void paperTextarea.offsetWidth
+      paperTextarea.classList.add('shake')
       paperTextarea.addEventListener('animationend', () => {
-        paperTextarea.classList.remove('shake');
-      }, { once: true });
-      return;
+        paperTextarea.classList.remove('shake')
+      }, { once: true })
+      return
     }
+
+    const { data: { session } } = await db.auth.getSession()
+    const userId = session?.user?.id
+    if (!userId) return
 
     if (currentEditCard) {
-      const idx = letters.findIndex(l => l.date === todayFormatted());
-      if (idx !== -1) letters[idx].text = text;
-      currentEditCard.querySelector('.letter-text').textContent = text;
-      await persistLetter({ date: todayFormatted(), text });
+      const idx = letters.findIndex(l => l.date === todayFormatted())
+      if (idx !== -1) letters[idx].text = text
+      currentEditCard.querySelector('.letter-text').textContent = text
+      await persistLetter({ date: todayFormatted(), text }, userId)
     } else {
-      const letter = { date: paperDate.textContent, text };
-      letters.unshift(letter);
-      addCard(letter);
-      updateView();
-      updateWriteButton();
-      await persistLetter(letter);
+      const letter = { date: paperDate.textContent, text }
+      letters.unshift(letter)
+      addCard(letter)
+      updateView()
+      updateWriteButton()
+      await persistLetter(letter, userId)
     }
-
-    closeOverlay();
+    closeOverlay()
   }
 
   /* ── Today's letter helpers ────────────────────────────────── */
   function getTodayLetter() {
-    return letters.find(l => l.date === todayFormatted()) || null;
+    return letters.find(l => l.date === todayFormatted()) || null
   }
 
   function updateWriteButton() {
-    if (getTodayLetter()) {
-      btnOpenWrite.innerHTML = '✦ &nbsp;open today\'s letter';
-    } else {
-      btnOpenWrite.innerHTML = '✉ &nbsp;write today\'s letter';
-    }
+    btnOpenWrite.innerHTML = getTodayLetter()
+      ? '✦ &nbsp;open today\'s letter'
+      : '✉ &nbsp;write today\'s letter'
   }
 
-  /* ── Open today's letter for editing ──────────────────────── */
   function openTodayEdit() {
-    const todayLetter = getTodayLetter();
-    if (!todayLetter) return;
-    currentEditCard = cardMap[todayFormatted()];
-    paperDate.textContent = todayLetter.date;
-    paperTextarea.value = todayLetter.text;
-    paperTextarea.style.height = 'auto';
-    writeOverlay.classList.add('open');
+    const todayLetter = getTodayLetter()
+    if (!todayLetter) return
+    currentEditCard = cardMap[todayFormatted()]
+    paperDate.textContent = todayLetter.date
+    paperTextarea.value = todayLetter.text
+    paperTextarea.style.height = 'auto'
+    writeOverlay.classList.add('open')
     setTimeout(() => {
-      paperTextarea.style.height = paperTextarea.scrollHeight + 'px';
-      paperTextarea.focus();
-    }, 60);
+      paperTextarea.style.height = paperTextarea.scrollHeight + 'px'
+      paperTextarea.focus()
+    }, 60)
   }
-
-  /* ── Auto-expand textarea ──────────────────────────────────── */
-  paperTextarea.addEventListener('input', function () {
-    this.style.height = 'auto';
-    this.style.height = this.scrollHeight + 'px';
-  });
 
   /* ── Event listeners ───────────────────────────────────────── */
+  paperTextarea.addEventListener('input', function () {
+    this.style.height = 'auto'
+    this.style.height = this.scrollHeight + 'px'
+  })
+
   btnOpenWrite.addEventListener('click', () => {
-    getTodayLetter() ? openTodayEdit() : openOverlay();
-  });
-  btnSaveWrite.addEventListener('click', saveLetter);
-  btnCancelWrite.addEventListener('click', closeOverlay);
+    getTodayLetter() ? openTodayEdit() : openOverlay()
+  })
+  btnSaveWrite.addEventListener('click', saveLetter)
+  btnCancelWrite.addEventListener('click', closeOverlay)
 
   writeOverlay.addEventListener('click', e => {
-    if (e.target === writeOverlay) closeOverlay();
-  });
+    if (e.target === writeOverlay) closeOverlay()
+  })
 
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape' && writeOverlay.classList.contains('open')) closeOverlay();
-  });
-
-  /* ── Load letters on startup ───────────────────────────────── */
-  loadLetters();
+    if (e.key === 'Escape' && writeOverlay.classList.contains('open')) closeOverlay()
+  })
 
 </script>
 </body>
