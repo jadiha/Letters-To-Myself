@@ -783,10 +783,12 @@
     const email    = authEmail.value.trim()
     const password = authPassword.value
 
-    if (!email)    { setAuthMsg('please enter your email ✿', false); return }
-    if (!password) { setAuthMsg('please enter a password ✿', false); return }
-    if (authMode === 'signup' && password.length < 6) {
-      setAuthMsg('password must be at least 6 characters', true); return
+    const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)
+    if (!email)        { setAuthMsg('please enter your email ✿', false); return }
+    if (!emailValid)   { setAuthMsg('please enter a valid email address', true); return }
+    if (!password)     { setAuthMsg('please enter a password ✿', false); return }
+    if (authMode === 'signup' && password.length < 8) {
+      setAuthMsg('password must be at least 8 characters', true); return
     }
 
     authSubmit.disabled = true
